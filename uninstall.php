@@ -1,6 +1,6 @@
 <?php
 /*
-WP Gif Player, an easy to use GIF Player for Wordpress
+WP GIF Player, an easy to use GIF Player for Wordpress
 Copyright (C) 2015  Stefanie Stoppel @ psmedia GmbH (http://p-s-media.de/kontakt)
 
 This program is free software: you can redistribute it and/or modify
@@ -26,3 +26,43 @@ delete_option($option_name);
 //Delete _first_frame entries in wp_postmeta
 global $wpdb;
 $num_rows = $wpdb->delete( 'wp_postmeta', array( 'meta_key' => '_first_frame' ) );
+
+/*
+ * Replace shortcodes in a post with the according gif (as html img tag).
+ */
+$query = "SELECT * FROM $wpdb->posts p where p.post_type = 'attachment' AND (p.post_mime_type = 'image/gif') AND (p.post_status = 'inherit')";
+$gifs = $wpdb->get_results( $query );
+
+foreach( $gifs as $gif ) {
+    // get gif parent posts
+    $gif_post_ids = get_post_ancestors( $gif->ID );
+
+    $gif_post_id = $gif_post_ids[0];
+
+    $gif_post = get_post($gif_post_id);
+
+    // apply_filters() changes the content to html formatting
+    $content = $gif_post->post_content;
+
+    // check if content contains shortcode
+    $shortcode_start = stripos($content, "[WPGP");
+    if( has_shortcode($content, "WPGP") || $shortcode_start !== false ) {
+
+        $shortcode_end = stripos($content, "]", $shortcode_start);
+                
+        $shortcode = substr( $content, $shortcode_start, ($shortcode_end+1 - $shortcode_start) );
+
+        // get image html for full size gif
+        $gif_attachment_html = wp_get_attachment_image($gif->ID, "full");
+
+        //replace shortcode with image html inside content
+        $content = str_replace($shortcode, $gif_attachment_html, $content);
+
+        //update the post
+        $updated_post = array(
+            'ID'            =>  $gif_post_id,
+            'post_content'  =>  $content
+        );
+        wp_update_post($updated_post);
+    } 
+}
